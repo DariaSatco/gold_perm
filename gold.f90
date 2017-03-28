@@ -17,7 +17,7 @@ real(8), dimension(2), parameter:: parRakic_LD=(/7.87, 0.053/) !eV
 !Rakic Brendel-Bormann
 real(8), dimension(2), parameter:: parRakic_BB=(/7.92, 0.05/) !eV
 !approximation data of the imaginary part (Palik)
-real(8), dimension(2), parameter:: parAproxIm=(/6.62, 0.089/) !eV
+real(8), dimension(2), parameter:: parAproxIm=(/9.0, 0.024/) !eV
 !approximation data of the real part (Palik)
 real(8), dimension(2), parameter:: parAproxRe=(/7.93, 0.08/) !eV
 
@@ -112,6 +112,53 @@ denum=(x**2+paramMar(1,3)*x)*(paramMar(1,4)**2+x**2+paramMar(2,3)*x)
 epsMar=num/denum
 
 end function
+!---------------------------------------------------
+
+function epsMar_re_im(x,marker)
+!Marachevsky formula for real/imaginary part eps(w)
+
+!marker (integer) allows to fix real or imaginary part
+!marker=0 - real part
+!marker=1 - imaginary part
+
+real(8):: x,epsMar_re_im
+complex(8):: num, denum, result, i
+real(8):: eV
+real(8), dimension(2,4):: paramMar
+
+i=(0.0,1.0)
+eV=1.519e15
+!Marachevsky model parameters (wl1,wl2//gl1,gl2//gt1,gt2//wt2,0)
+paramMar(1,1)=exp(-0.96)*1e16
+paramMar(2,1)=exp(0.2866)*1e16
+paramMar(1,2)=exp(-2.536)*1e16
+paramMar(2,2)=exp(1.255)*1e16
+paramMar(1,3)=exp(-4.7922)*1e16
+paramMar(2,3)=exp(-0.957)*1e16
+paramMar(1,4)=exp(-0.8359)*1e16
+paramMar(2,4)=0.0_8
+
+paramMar=paramMar/eV
+
+num=(paramMar(1,1)**2-x**2-i*paramMar(1,2)*x)*(paramMar(2,1)**2-x**2-i*paramMar(2,2)*x)
+denum=(-x**2-i*paramMar(1,3)*x)*(paramMar(1,4)**2-x**2-i*paramMar(2,3)*x)
+
+result=num/denum
+
+if (marker.eq.0) then
+
+epsMar_re_im=real(result)
+
+elseif (marker.eq.1) then
+epsMar_re_im=aimag(result)
+
+else
+print*, "Incorrect marker. Please, use marker=0 to get real part and marker=1 - imaginary"
+
+endif
+
+
+end function
 
 !---------------------------------------------------
 
@@ -195,7 +242,7 @@ function drude_to_int(x)
 
 real(8):: x, drude_to_int, param(2)
 
-param=parRakic_LD
+param=parAproxIm
 drude_to_int=param(1)**2*param(2)/((x**2+param(2)**2)*(x**2+freqA**2))
 
 end function
