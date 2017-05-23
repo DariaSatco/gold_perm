@@ -23,7 +23,9 @@ real(8):: integralA1,integralA2
 real(8)::funvalAu(n1),SpcoefA(3,n1), exintA(n1), workA(n1)
 !variables for Kr-K integral in qags subroutine
 integer(4)::nevalA,ierA
-
+real(4):: resultint, abserr
+real(8):: re1, re2, im1, im2
+logical:: logvar
 
 real(8):: T
 real(8):: Lorentz_oscil_re(nw), Lorentz_oscil_im(nw)
@@ -33,6 +35,7 @@ real(8):: LD_model_re(nw), BB_mod_re(nw), Gen_pl_mod(nw)
 real(8):: LD_model_im(nw), BB_mod_im(nw)
 real(8):: epsMar_re(nw), epsMar_im(nw)
 real(8):: Drude_re(nw), Drude_im(nw)
+real(8):: eps_kramers(nw), eps_kramers1(nw)
 real(8):: force_LD(6), force_BB(6)
 
 print*, "Process..."
@@ -122,19 +125,20 @@ LD_model_im(i)=Drude_Re_Im(x(i), parRakic_LD, 1)
 BB_mod_im(i)=Drude_Re_Im(x(i), parRakic_BB, 1)
 end do
 
-100 format(7(f15.3))
-150 format(7(A15))
+100 format(8(f15.3))
+150 format(8(A15))
 
 !golddata.txt - eps(iw)
 !create the top of the table
-write(18,150) 'freq (eV)', 'K-K (Drude)', 'Drude', 'Marachevsky', 'Gen_plasma', 'Bren_Borm', 'Lor-Dr'
+write(18,150) 'freq (eV)', 'K-K (Drude)', 'Drude', 'Marachevsky', 'Gen_plasma', 'Bren_Borm', 'Lor-Dr', 'Spec fun'
 !write values in the table
 do i=1,nw
-write(18,100) x(i), epsAur(i), eps_Drude(i), eps_Mar(i), eps_Gen(i), eps_BB(i), eps_LD(i)
+write(18,100) x(i), epsAur(i), eps_Drude(i), eps_Mar(i), eps_Gen(i), eps_BB(i), eps_LD(i), &
+eps_Drude(i)+eps_gauss_iomega(x(i),amplitude_im,w_band_im,sigma_im,6)
 end do
 
-200 format(6(f15.3))
-250 format(6(A15))
+200 format(8(f15.3))
+250 format(8(A15))
 
 !gold_oscillators_real.txt
 !create the top of the table
@@ -169,7 +173,7 @@ write(22,200) x(i), LD_model_im(i), BB_mod_im(i)
 end do
 
 !eps(w)_re.txt
-write(25,250) 'freq (eV)', 'Lorentz', 'Gen_Plasma', 'Bren_Borm', 'Marachevsky', 'Drude'
+write(25,250) 'freq (eV)', 'Lorentz', 'Gen_Plasma', 'Bren_Borm', 'Marachevsky', 'Drude', 'Dr+Gauss'
 
 do i=1,nw
 
@@ -178,11 +182,11 @@ epsMar_re(i)=epsMar_re_im(x(i), 0)
 Drude_re(i)=Drude_Re_Im(x(i), parAproxIm, 0)
 
 write(25,200) x(i), LD_model_re(i)+Lorentz_oscil_re(i), Gen_pl_mod(i)+Mostep_oscil_re(i), BB_mod_re(i)+BB_oscil_re(i), &
-epsMar_re(i), Drude_re(i)
+epsMar_re(i), Drude_re(i), Drude_re(i)+Gauss_aprox(x(i), amplitude_re, w_band_re, sigma_re, 1, 6)
 end do
 
 !eps(w)_im.txt
-write(26,250) 'freq (eV)', 'Lorentz', 'Gen_Plasma', 'Bren_Borm', 'Marachevsky', 'Drude'
+write(26,250) 'freq (eV)', 'Lorentz', 'Gen_Plasma', 'Bren_Borm', 'Marachevsky', 'Drude', 'Dr+Gauss'
 
 do i=1,nw
 
@@ -191,19 +195,68 @@ epsMar_im(i)=epsMar_re_im(x(i), 1)
 Drude_im(i)=Drude_Re_Im(x(i), parAproxIm, 1)
 
 write(26,200) x(i), LD_model_im(i)+Lorentz_oscil_im(i), Mostep_oscil_im(i), BB_mod_im(i)+BB_oscil_im(i),&
-epsMar_im(i), Drude_im(i)
+epsMar_im(i), Drude_im(i), Drude_im(i)+Gauss_aprox(x(i), amplitude_im, w_band_im, sigma_im, 2, 6)
 end do
 
 !experimental data - only oscillation part
 open(unit=23, file='eps_minus_drude_re_im.txt', status='replace')
 
-!eps(w)_im.txt
-write(23,250) 'freq (eV)', 're_eps', 'im_eps'
+!eps_minus_drude_re_im
+write(23,150) 'freq (eV)', 're_eps', 'im_eps', 're_aprox', 'im_aprox', 'kramers_re', 'kramers_im'
 
+!calculate kramers-kronig relations for real and imaginary part
 do i=1,nw
-write(23,200) x(i), matrixAu(i,2)-Drude_re(i), matrixAu(i,3)-Drude_im(i)
+freqA=x(i)
+
+     call qawc( gauss_kramers_int7, 0.0, 10000.0, real(freqA,4), 1.0e-5, 1.0e-4, resultint, abserr, nevalA, ierA )
+
+     eps_kramers(i)=resultint*2/pi
+
+     call qawc( gauss_kramers_int1, 0.001, 10000.0, real(freqA,4), 1.0e-5, 1.0e-5, resultint, abserr, nevalA, ierA )
+     eps_kramers1(i)= - resultint/pi
+     call qawc( gauss_kramers_int1, -10000.0, 0.001, real(freqA,4), 1.0e-5, 1.0e-5, resultint, abserr, nevalA, ierA )
+     eps_kramers1(i)=eps_kramers1(i) - resultint/pi
 end do
 
+!write data in file
+do i=1,nw
+
+write(23,100) x(i), matrixAu(i,2)-Drude_re(i), matrixAu(i,3)-Drude_im(i), &
+Gauss_aprox(x(i), amplitude_re, w_band_re, sigma_re, 1, 6), &
+Gauss_aprox(x(i), amplitude_im7, w_band_im7, sigma_im7, 2, 7), eps_kramers(i), eps_kramers1(i)
+
+end do
+
+
+print*, 2.0D+00
+
+print*, 'dr-lor'
+print*, Drude_Re_Im(2.0D+00, parRakic_LD, 0)+oscil_gold_re_im(2.0D+00, force_LD, gammaR, wR,6, 0), &
+Drude_Re_Im(-2.0D+00, parRakic_LD, 0)+oscil_gold_re_im(-2.0D+00, force_LD, gammaR, wR,6, 0)
+print*, Drude_Re_Im(2.0D+00, parRakic_LD, 1)+oscil_gold_re_im(2.0D+00, force_LD, gammaR, wR, 6, 1), &
+Drude_Re_Im(-2.0D+00, parRakic_LD, 1)+oscil_gold_re_im(-2.0D+00, force_LD, gammaR, wR, 6, 1)
+
+print*, 'plasma'
+print*, Plasma(2.0D+00, parMost, 0)+oscil_gold_re_im(2.0D+00, gAu, gammaAu, wAu,6, 0), &
+Plasma(-2.0D+00, parMost, 0)+oscil_gold_re_im(-2.0D+00, gAu, gammaAu, wAu,6, 0)
+print*, oscil_gold_re_im(2.0D+00, gAu, gammaAu, wAu, 6, 1), &
+oscil_gold_re_im(-2.0D+00, gAu, gammaAu, wAu, 6, 1)
+
+print*, 'Marachevsky'
+print*, epsMar_re_im(2.0D+00, 0), epsMar_re_im(-2.0D+00, 0)
+print*, epsMar_re_im(2.0D+00, 1), epsMar_re_im(-2.0D+00, 1)
+
+print*, 'brend-borm'
+print*, Brendel_Bormann_oscil_Re_Im(2.0D+00, force_BB, gammaRb, wRb, sigmaRb,6, 0),&
+Brendel_Bormann_oscil_Re_Im(-2.0D+00, force_BB, gammaRb, wRb, sigmaRb,6, 0)
+print*, Brendel_Bormann_oscil_Re_Im(2.0D+00, force_BB, gammaRb, wRb, sigmaRb,6, 1), &
+Brendel_Bormann_oscil_Re_Im(-2.0D+00, force_BB, gammaRb, wRb, sigmaRb,6, 1)
+
+print*, 'dr-gauss'
+print*, Drude_Re_Im(2.0D+00, parRakic_LD, 0)+Gauss_aprox(2.0D+00, amplitude_re, w_band_re, sigma_re, 1, 6),&
+Drude_Re_Im(-2.0D+00, parRakic_LD, 0)+Gauss_aprox(-2.0D+00, amplitude_re, w_band_re, sigma_re, 1, 6)
+print*, Drude_Re_Im(2.0D+00, parRakic_LD, 1)+Gauss_aprox(2.0D+00, amplitude_re, w_band_re, sigma_re, 2, 6), &
+Drude_Re_Im(-2.0D+00, parRakic_LD, 1)+Gauss_aprox(-2.0D+00, amplitude_re, w_band_re, sigma_re, 2, 6)
 
 close(15)
 close(18)
